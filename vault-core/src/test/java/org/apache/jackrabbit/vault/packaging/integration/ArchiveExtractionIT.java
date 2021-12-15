@@ -24,8 +24,10 @@ import java.util.HashSet;
 import java.util.Set;
 
 import javax.jcr.ItemExistsException;
+import javax.jcr.Node;
 import javax.jcr.RepositoryException;
 
+import com.google.common.collect.Sets;
 import org.apache.jackrabbit.vault.fs.io.Archive;
 import org.apache.jackrabbit.vault.fs.io.ImportOptions;
 import org.apache.jackrabbit.vault.fs.io.ZipStreamArchive;
@@ -36,6 +38,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -157,6 +162,39 @@ public class ArchiveExtractionIT extends IntegrationTestBase {
         size = admin.getProperty(getInstallationPath(PACKAGE_ID_SUB_B)+ "/jcr:content/jcr:data").getLength();
         assertTrue("sub package must have data", size > 0);
         assertNodeMissing("/tmp/b");
+    }
+
+    @Test
+    public void testDeletionWithIncludesAndExcludes() throws PackageException, RepositoryException, IOException {
+        final Node rootNode = admin.getRootNode();
+        final Node etcNode = rootNode.addNode("etc");
+        final Node testNode = etcNode.addNode("test");
+        for (char c = 'a'; c <= 'z'; c++) {
+            testNode.addNode(String.valueOf(c));
+        }
+
+        final Archive a = getFileArchive("/test-packages/deletionWithIncludesAndExcludes.zip");
+
+        // install
+        final ImportOptions opts = getDefaultOptions();
+        final PackageId[] ids = packMgr.extract(a, opts, false);
+        assertArrayEquals(ids, new PackageId[]{
+            new PackageId("my_packages", "deletionWithIncludesAndExcludes", "")
+        });
+
+        // The normal filter.xml entries for deletion
+        assertNodeMissing("/etc/test/a");
+        assertNodeMissing("/etc/test/b");
+
+        // The nodes that should still exist
+        for (char c = 'h'; c <= 'z'; c++) {
+            assertNodeExists("/etc/test/" + c);
+        }
+
+        // The nodes that have been deleted through the include pattern
+        for (char c = 'c'; c <= 'g'; c++) {
+            assertNodeMissing("/etc/test/" + c);
+        }
     }
 
     @Test
